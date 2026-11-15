@@ -45,6 +45,7 @@ class PeeStream_Admin {
 	public function sanitize_settings( $input ) {
 		$output = array();
 		$output['api_key'] = isset( $input['api_key'] ) ? sanitize_text_field( trim( $input['api_key'] ) ) : '';
+		$output['site_id'] = isset( $input['site_id'] ) ? sanitize_text_field( trim( $input['site_id'] ) ) : '';
 		
 		$player_domain = isset( $input['player_domain'] ) ? esc_url_raw( trim( $input['player_domain'] ) ) : 'https://peeplayer.com';
 		if ( 0 !== strpos( $player_domain, 'https://' ) ) {
@@ -69,6 +70,7 @@ class PeeStream_Admin {
 		}
 		$output['webhook_secret'] = $secret;
 		$output['auto_create_posts'] = ! empty( $input['auto_create_posts'] ) ? '1' : '0';
+		$output['default_post_status'] = ( isset( $input['default_post_status'] ) && 'publish' === $input['default_post_status'] ) ? 'publish' : 'draft';
 		$output['default_post_type'] = isset( $input['default_post_type'] ) ? sanitize_key( $input['default_post_type'] ) : 'movies';
 
 		return $output;
@@ -158,6 +160,7 @@ class PeeStream_Admin {
 	public function render_admin_page() {
 		$options = wp_parse_args( get_option( 'peestream_settings', array() ), array(
 			'api_key'             => '',
+			'site_id'             => '',
 			'player_domain'       => 'https://peeplayer.com',
 			'api_domain'          => 'https://peestream.com',
 			'default_folder_id'   => '0',
@@ -166,10 +169,11 @@ class PeeStream_Admin {
 			'default_quality'     => '1080p',
 			'webhook_secret'      => wp_generate_password( 24, false ),
 			'auto_create_posts'   => '0', // Default OFF per P0 requirement
+			'default_post_status' => 'draft',
 			'default_post_type'   => 'movies',
 		) );
 
-		$webhook_endpoint = get_rest_url( null, 'peestream/v1/webhook' ) . '?secret=' . rawurlencode( $options['webhook_secret'] );
+		$webhook_endpoint = get_rest_url( null, 'peestream/v1/webhook' );
 		?>
 		<div class="wrap peestream-wrap">
 			<div class="peestream-header">
@@ -222,6 +226,13 @@ class PeeStream_Admin {
 										<input type="password" id="pst_api_key" name="peestream_settings[api_key]" value="<?php echo esc_attr( $options['api_key'] ); ?>" class="regular-text" autocomplete="off" placeholder="e.g. 52834b679a...">
 										<button type="button" class="button button-small" onclick="pstToggleSecret('pst_api_key')"><?php esc_html_e( 'Show/Hide', 'peestream-wp-dooplay' ); ?></button>
 										<p class="description"><?php esc_html_e( 'Found in your PeeStream dashboard under My Account -> API Key.', 'peestream-wp-dooplay' ); ?></p>
+									</td>
+								</tr>
+								<tr>
+									<th scope="row"><label for="pst_site_id"><?php esc_html_e( 'PeeStream Site ID', 'peestream-wp-dooplay' ); ?></label></th>
+									<td>
+										<input type="text" id="pst_site_id" name="peestream_settings[site_id]" value="<?php echo esc_attr( $options['site_id'] ); ?>" class="regular-text" placeholder="e.g. site_8f3k2m1q">
+										<p class="description"><?php esc_html_e( 'PeeStream Site UID for this portal (used for multi-site routing and verification).', 'peestream-wp-dooplay' ); ?></p>
 									</td>
 								</tr>
 								<tr>
@@ -307,6 +318,16 @@ class PeeStream_Admin {
 											<input type="checkbox" name="peestream_settings[auto_create_posts]" value="1" <?php checked( '1', $options['auto_create_posts'] ); ?>>
 											<?php esc_html_e( 'Create new episode posts if they do not exist yet in DooPlay.', 'peestream-wp-dooplay' ); ?>
 										</label>
+									</td>
+								</tr>
+								<tr>
+									<th scope="row"><label for="pst_post_status"><?php esc_html_e( 'Default Post Status', 'peestream-wp-dooplay' ); ?></label></th>
+									<td>
+										<select id="pst_post_status" name="peestream_settings[default_post_status]">
+											<option value="draft" <?php selected( $options['default_post_status'], 'draft' ); ?>><?php esc_html_e( 'Draft (Recommended for review)', 'peestream-wp-dooplay' ); ?></option>
+											<option value="publish" <?php selected( $options['default_post_status'], 'publish' ); ?>><?php esc_html_e( 'Publish immediately', 'peestream-wp-dooplay' ); ?></option>
+										</select>
+										<p class="description"><?php esc_html_e( 'Status applied to newly created movies and episodes received via webhook.', 'peestream-wp-dooplay' ); ?></p>
 									</td>
 								</tr>
 								<tr>

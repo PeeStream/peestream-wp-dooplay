@@ -957,7 +957,13 @@ class WP_REST_Request {
 	public function get_params() { return $this->params; }
 	public function get_json_params() { return $this->params; }
 	public function get_body_params() { return $this->params; }
-	public function get_header( $name ) { return $this->headers[ strtolower( $name ) ] ?? null; }
+	public function get_body() { return is_string( $this->params ) ? $this->params : json_encode( $this->params ); }
+	public function get_header( $name ) {
+		$lower = strtolower( $name );
+		if ( isset( $this->headers[ $lower ] ) ) return $this->headers[ $lower ];
+		if ( isset( $this->headers[ $name ] ) ) return $this->headers[ $name ];
+		return null;
+	}
 }
 class WP_REST_Response {
 	public $data;

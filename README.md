@@ -1,9 +1,15 @@
+<p align="center">
+  <a href="https://peestream.com" target="_blank" rel="noopener noreferrer">
+    <img src="assets/branding/peestream-logo-horizontal.svg" alt="PeeStream for WordPress & DooPlay" width="380" style="max-width: 100%;">
+  </a>
+</p>
+
 # PeeStream for WordPress & DooPlay
 
 The official high-performance video player, automation suite, and safe competitor migrator for **PeeStream** (`peestream.com` / `peeplayer.com`). Tailored for high-traffic movie & TV show streaming portals running the **DooPlay** theme (2.5.x) or generic WordPress themes.
 
 > [!WARNING]
-> **BETA RELEASE (v1.0.4-beta.1) — NOT PRODUCTION TESTED**
+> **BETA RELEASE (v1.0.4-beta.1) - NOT PRODUCTION TESTED**
 > Compatibility across WordPress and DooPlay 2.5.x is expected based on architecture review and automated harness simulations (174 tests passed). Live CMS End-to-End runtime testing on an active WordPress/DooPlay installation has **NOT BEEN RUN**. Installation is recommended exclusively on staging/testing sites. Always make a full database backup before running migrations. Please report any issues along with your CMS, theme, PHP, and database versions.
 
 ---
@@ -44,11 +50,13 @@ The official high-performance video player, automation suite, and safe competito
    - **IMDb Importer:** Reserve and import videos by IMDb ID (`tt...`) with season and episode numbers.
    - Real-time DooPlay server list preview with quick delete action.
 
-4. **Hardened REST API Webhook Receiver:**
-   - Dedicated endpoint: `POST /wp-json/peestream/v1/webhook?secret=YOUR_SECRET`.
-   - **Security:** POST-only, fail-closed token validation (minimum 16 characters required), IP rate-limiting (60 requests/minute), replay attack prevention via DB audit table (`wp_peestream_webhooks`).
-   - **Strict Disambiguation:** Resolves parent TV shows and episodes strictly via IMDb (`tt...`) or TMDb IDs. Eliminates ambiguous title-only guessing.
-   - **Safe Opt-In Post Creation:** `auto_create_posts` defaults to `OFF` (`0`). Dynamic administrator author assignment prevents unauthenticated post publications.
+4. **AutoPublish V2 REST Webhook Receiver:**
+   - Endpoint: `POST /wp-json/peestream/v1/webhook` (no secret in the URL).
+   - **HMAC-SHA256:** Verifies `X-PeeStream-Signature: sha256=<hex>` over the exact raw request body with `hash_equals()`.
+   - **Site and Event Handling:** `site.test` is acknowledged immediately; unknown event types return 200 and are ignored. For `media.ready`, a configured `site_id` must match the signed payload.
+   - **Idempotency:** Deduplicates by `event_id` for 72 hours and ignores expired deliveries.
+   - **Strict Disambiguation:** Resolves parent TV shows and episodes by IMDb (`tt...`) or TMDb identifiers, avoiding title-only guessing.
+   - **Safe Opt-In Post Creation:** `auto_create_posts` defaults to `OFF` (`0`); new posts default to draft unless configured otherwise.
 
 5. **Universal Shortcode for Generic Themes:**
    - Embed fluid 16:9 HLS players on any WordPress theme:
@@ -64,13 +72,14 @@ The official high-performance video player, automation suite, and safe competito
 
 ## Installation
 
-1. Download the release package `peestream-wp-dooplay_v1.0.4.zip` (or Release Candidate `peestream-wp-dooplay_v1.0.4-RC.zip`).
+1. Download the release package `peestream-wp-dooplay_v1.0.4-beta.1.zip` from the official GitHub Releases page.
 2. Go to **WordPress Admin -> Plugins -> Add New -> Upload Plugin** and select the ZIP file.
 3. Click **Install Now** and activate the plugin.
 4. Go to **PeeStream -> Settings** in your WordPress admin menu.
 5. Enter your **PeeStream API Key** (found in your PeeStream dashboard under *My Account*).
 6. Click **Verify API Connection** to confirm connectivity, account tier, and USD balance.
 7. Configure default player server name, language, and quality preferences, then click **Save All Changes**.
+8. In the webhook settings, set the registered PeeStream `site_id` and the same webhook secret configured for that site. Register the displayed endpoint in PeeStream; deliveries are signed in the `X-PeeStream-Signature` header. Never append a secret to the URL.
 
 ---
 

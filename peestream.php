@@ -40,6 +40,7 @@ final class PeeStream_Plugin {
 		require_once PEESTREAM_PLUGIN_DIR . 'includes/class-peestream-admin.php';
 		require_once PEESTREAM_PLUGIN_DIR . 'includes/class-peestream-metabox.php';
 		require_once PEESTREAM_PLUGIN_DIR . 'includes/class-peestream-migrator.php';
+		require_once PEESTREAM_PLUGIN_DIR . 'includes/class-peestream-webhook-handler.php';
 		require_once PEESTREAM_PLUGIN_DIR . 'includes/class-peestream-webhook.php';
 		require_once PEESTREAM_PLUGIN_DIR . 'includes/class-peestream-shortcode.php';
 	}

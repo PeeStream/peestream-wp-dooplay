@@ -29,37 +29,8 @@ class PeeStream_Webhook {
 		register_rest_route( 'peestream/v1', '/webhook', array(
 			'methods'             => WP_REST_Server::CREATABLE, // POST only
 			'callback'            => array( $this, 'handle_webhook' ),
-			'permission_callback' => array( $this, 'verify_permission' ),
+			'permission_callback' => '__return_true',
 		) );
-	}
-
-	public function verify_permission( WP_REST_Request $request ) {
-		$this->options = get_option( 'peestream_settings', array() );
-		$configured_secret = ! empty( $this->options['webhook_secret'] ) ? trim( (string) $this->options['webhook_secret'] ) : '';
-
-		// Fail-closed: Reject if secret is missing or too weak (< 16 chars)
-		if ( empty( $configured_secret ) || strlen( $configured_secret ) < 16 ) {
-			return new WP_Error(
-				'peestream_no_secret',
-				__( 'Webhook secret is not configured or too weak (min 16 chars). Request rejected.', 'peestream-wp-dooplay' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		$incoming_secret = $request->get_param( 'secret' );
-		if ( empty( $incoming_secret ) ) {
-			$incoming_secret = $request->get_header( 'x-webhook-secret' );
-		}
-
-		if ( empty( $incoming_secret ) || ! hash_equals( (string) $configured_secret, (string) $incoming_secret ) ) {
-			return new WP_Error(
-				'peestream_invalid_secret',
-				__( 'Access denied. Invalid webhook secret token.', 'peestream-wp-dooplay' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		return true;
 	}
 
 	public function handle_webhook( WP_REST_Request $request ) {
@@ -72,15 +43,18 @@ class PeeStream_Webhook {
 			), 405 );
 		}
 
-		// Verify secret permissions
-		$permission = $this->verify_permission( $request );
-		if ( is_wp_error( $permission ) ) {
-			$data = $permission->get_error_data();
-			$status = isset( $data['status'] ) ? (int) $data['status'] : 401;
+		// HMAC-SHA256 verification over raw body with legacy secret parameter fallback
+		$raw_body = $request->get_body();
+		$signature = $request->get_header( 'x-peestream-signature' );
+		$secret = ! empty( $this->options['webhook_secret'] ) ? trim( (string) $this->options['webhook_secret'] ) : '';
+		$req_secret = method_exists( $request, 'get_param' ) ? $request->get_param( 'secret' ) : null;
+		$is_valid_hmac = ! empty( $signature ) && PeeStream_Webhook_Handler::verify_signature( $raw_body, $signature, $secret );
+		$is_valid_secret = ! empty( $req_secret ) && hash_equals( (string)$secret, (string)$req_secret );
+		if ( ! empty( $secret ) && ! $is_valid_hmac && ! $is_valid_secret ) {
 			return new WP_REST_Response( array(
 				'success' => false,
-				'error'   => $permission->get_error_message(),
-			), $status );
+				'error' => __( 'Invalid webhook signature.', 'peestream-wp-dooplay' ),
+			), 401 );
 		}
 
 		global $wpdb;
@@ -116,6 +90,46 @@ class PeeStream_Webhook {
 			$params = $request->get_body_params();
 		}
 
+		// API v2 contract handling.
+		$event = isset( $params['event'] ) ? trim( (string) $params['event'] ) : 'video_ready';
+
+		if ( 'site.test' === $event ) {
+			return new WP_REST_Response( array( 'status' => 'ok' ), 200 );
+		}
+
+		if ( ! in_array( $event, array( 'media.ready', 'video_ready', 'new_episode_ready', 'movie_ready' ), true ) ) {
+			if ( false !== strpos( $event, '.' ) ) {
+				return new WP_REST_Response( array( 'success' => true ), 200 );
+			}
+			return new WP_REST_Response( array(
+				'success' => false,
+				'error'   => __( 'Disallowed event type.', 'peestream-wp-dooplay' ),
+			), 400 );
+		}
+
+		// Site ownership check applies only to supported media events, never to connection tests.
+		// Prefer the nested admin setting; retain the standalone option as fallback.
+		$configured_site_id = ! empty( $this->options['site_id'] )
+			? trim( (string) $this->options['site_id'] )
+			: trim( (string) get_option( 'peestream_site_id', '' ) );
+
+		if ( 'media.ready' === $event ) {
+			if ( '' !== $configured_site_id && ( ! isset( $params['site_id'] ) || ! hash_equals( $configured_site_id, trim( (string) $params['site_id'] ) ) ) ) {
+				return new WP_REST_Response( array(
+					'success' => false,
+					'error'   => __( 'Invalid site_id.', 'peestream-wp-dooplay' ),
+				), 403 );
+			}
+			return $this->process_media_ready( $params, $client_ip, $event );
+		}
+
+		if ( '' !== $configured_site_id && isset( $params['site_id'] ) && ! hash_equals( $configured_site_id, trim( (string) $params['site_id'] ) ) ) {
+			return new WP_REST_Response( array(
+				'success' => false,
+				'error'   => __( 'Invalid site_id.', 'peestream-wp-dooplay' ),
+			), 403 );
+		}
+
 		// Extract & Validate file_code
 		$file_code = '';
 		if ( ! empty( $params['file_code'] ) ) {
@@ -128,15 +142,6 @@ class PeeStream_Webhook {
 			return new WP_REST_Response( array(
 				'success' => false,
 				'error'   => __( 'Missing or invalid file_code parameter.', 'peestream-wp-dooplay' ),
-			), 400 );
-		}
-
-		// Validate Event Type
-		$event = isset( $params['event'] ) ? sanitize_key( $params['event'] ) : 'video_ready';
-		if ( ! in_array( $event, $this->allowed_events, true ) ) {
-			return new WP_REST_Response( array(
-				'success' => false,
-				'error'   => sprintf( __( 'Unsupported event: %s', 'peestream-wp-dooplay' ), esc_html( $event ) ),
 			), 400 );
 		}
 
@@ -275,6 +280,101 @@ class PeeStream_Webhook {
 
 		// CASE 2: Movie or Generic Video
 		return $this->process_movie( $file_code, $embed_url, $server_entry, $imdb_id, $tmdb_id, $title, $poster_url, $auto_create, $client_ip, $event );
+	}
+
+	protected function process_media_ready( $params, $client_ip, $event ) {
+		global $wpdb;
+
+		$event_id = isset( $params['event_id'] ) ? trim( (string) $params['event_id'] ) : '';
+		$occurred_at = isset( $params['occurred_at'] ) ? trim( (string) $params['occurred_at'] ) : '';
+		$occurred_ts = strtotime( $occurred_at );
+
+		if ( false !== $occurred_ts && ( time() - $occurred_ts ) > ( 72 * HOUR_IN_SECONDS ) ) {
+			return new WP_REST_Response( array(
+				'success' => true,
+				'action'  => 'expired_ignored',
+			), 200 );
+		}
+
+		if ( ! empty( $event_id ) && PeeStream_Webhook_Handler::is_duplicate( $event_id ) ) {
+			return new WP_REST_Response( array(
+				'success' => true,
+				'action'  => 'duplicate_ignored',
+			), 200 );
+		}
+
+		$file_code = '';
+		if ( ! empty( $params['file_code'] ) ) {
+			$file_code = trim( (string) $params['file_code'] );
+		} elseif ( ! empty( $params['filecode'] ) ) {
+			$file_code = trim( (string) $params['filecode'] );
+		}
+
+		if ( empty( $file_code ) || ! preg_match( '/^[a-zA-Z0-9_\-]+$/', $file_code ) || strlen( $file_code ) > 64 ) {
+			return new WP_REST_Response( array(
+				'success' => false,
+				'error'   => __( 'Missing or invalid file_code parameter.', 'peestream-wp-dooplay' ),
+			), 400 );
+		}
+
+		$now_date = current_time( 'mysql', true );
+		$wpdb->query( $wpdb->prepare(
+			"INSERT IGNORE INTO {$wpdb->prefix}peestream_webhooks (file_code, event, post_id, ip, received_at, status)
+			 VALUES (%s, %s, 0, %s, %s, 'processing')",
+			$file_code,
+			$event,
+			$client_ip,
+			$now_date
+		) );
+
+		$imdb_id = isset( $params['imdb_id'] ) ? trim( (string) $params['imdb_id'] ) : '';
+		$tmdb_id = isset( $params['tmdb_id'] ) ? absint( $params['tmdb_id'] ) : 0;
+		$season  = isset( $params['season'] ) ? absint( $params['season'] ) : 0;
+		$episode = isset( $params['episode'] ) ? absint( $params['episode'] ) : 0;
+
+		$title = isset( $params['title'] ) ? sanitize_text_field( trim( wp_strip_all_tags( $params['title'] ) ) ) : 'Video';
+		$series_title = isset( $params['series_title'] ) ? sanitize_text_field( trim( wp_strip_all_tags( $params['series_title'] ) ) ) : '';
+
+		$poster_url = '';
+		if ( ! empty( $params['poster'] ) && filter_var( $params['poster'], FILTER_VALIDATE_URL ) ) {
+			$poster_url = esc_url_raw( trim( $params['poster'] ) );
+		} elseif ( ! empty( $params['poster_url'] ) && filter_var( $params['poster_url'], FILTER_VALIDATE_URL ) ) {
+			$poster_url = esc_url_raw( trim( $params['poster_url'] ) );
+		}
+
+		$player_domain = ! empty( $this->options['player_domain'] ) ? rtrim( $this->options['player_domain'], '/' ) : 'https://peeplayer.com';
+		$server_name   = ! empty( $this->options['default_server_name'] ) ? $this->options['default_server_name'] : 'PeeStream HD';
+		$language      = ! empty( $this->options['default_language'] ) ? $this->options['default_language'] : 'English';
+		$quality       = ! empty( $this->options['default_quality'] ) ? $this->options['default_quality'] : '1080p';
+		$auto_create   = ! empty( $this->options['auto_create_posts'] ) && '1' === (string) $this->options['auto_create_posts'];
+
+		$embed_url = ! empty( $params['player_url'] ) && filter_var( $params['player_url'], FILTER_VALIDATE_URL )
+			? esc_url_raw( trim( $params['player_url'] ) )
+			: $player_domain . '/e/' . $file_code;
+
+		$server_entry = array(
+			'name'    => $server_name,
+			'select'  => 'iframe',
+			'idioma'  => $language,
+			'quality' => $quality,
+			'url'     => $embed_url,
+		);
+
+		$kind = isset( $params['kind'] ) ? trim( (string) $params['kind'] ) : '';
+		$is_episode = 'episode' === $kind || ( $season > 0 && $episode > 0 );
+
+		if ( $is_episode ) {
+			$response = $this->process_episode( $file_code, $embed_url, $server_entry, $imdb_id, $tmdb_id, $title, $series_title, $season, $episode, $poster_url, $auto_create, $client_ip, $event );
+		} else {
+			$response = $this->process_movie( $file_code, $embed_url, $server_entry, $imdb_id, $tmdb_id, $title, $poster_url, $auto_create, $client_ip, $event );
+		}
+
+		$response_data = ( is_object( $response ) && method_exists( $response, 'get_data' ) ) ? $response->get_data() : array();
+		if ( ! empty( $event_id ) && 200 === $response->get_status() && ! empty( $response_data['success'] ) ) {
+			PeeStream_Webhook_Handler::mark_event_processed( $event_id );
+		}
+
+		return $response;
 	}
 
 	private function process_episode( $file_code, $embed_url, $server_entry, $imdb_id, $tmdb_id, $title, $series_title, $season, $episode, $poster_url, $auto_create, $client_ip, $event ) {
@@ -449,10 +549,14 @@ class PeeStream_Webhook {
 				}
 				$is_new_transaction = true;
 
+				$post_status = ! empty( $this->options['default_post_status'] ) && in_array( $this->options['default_post_status'], array( 'publish', 'draft' ), true )
+					? $this->options['default_post_status']
+					: 'draft';
+
 				$new_post_id = wp_insert_post( array(
 					'post_title'   => $ep_post_title,
 					'post_content' => sprintf( 'Watch %s Season %d Episode %d online in full HD.', esc_html( $show_name ), $season, $episode ),
-					'post_status'  => 'draft', // Draft status for safe review
+					'post_status'  => $post_status,
 					'post_type'    => 'episodes',
 					'post_author'  => $author_id,
 					'meta_input'   => array(
@@ -741,10 +845,14 @@ class PeeStream_Webhook {
 					$meta_input['ids'] = $imdb_id;
 				}
 
+				$post_status = ! empty( $this->options['default_post_status'] ) && in_array( $this->options['default_post_status'], array( 'publish', 'draft' ), true )
+					? $this->options['default_post_status']
+					: 'draft';
+
 				$new_post_id = wp_insert_post( array(
 					'post_title'   => $title,
 					'post_content' => sprintf( 'Watch %s online in full HD.', esc_html( $title ) ),
-					'post_status'  => 'draft',
+					'post_status'  => $post_status,
 					'post_type'    => $target_cpt,
 					'post_author'  => $author_id,
 					'meta_input'   => $meta_input,
