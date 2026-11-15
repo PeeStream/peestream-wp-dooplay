@@ -18,6 +18,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.0.5-beta.2] - 2026-11-15
+
+### Fixed
+- Release packaging integrity: the tag `v1.0.5-beta.1` shipped a repository-tracked artifact whose SHA-256 did not match the published `SHA256SUMS` and release asset. `v1.0.5-beta.2` rebuilds the package from the tagged sources and ships a verified checksum.
+
+### Added
+- `scripts/build-release.sh` - byte-reproducible ZIP build (fixed timestamps, sorted allowlist, explicit deflate level) that writes `dist/` and refreshes `SHA256SUMS`.
+- `readme.txt` is now part of the packaged archive.
+
+### Changed
+- No functional code changes; webhook, player, and migrator code is unchanged from `v1.0.5-beta.1`.
+
+---
+
 ## [1.0.5-beta.1] - 2026-11-12
 
 ### Important Notice

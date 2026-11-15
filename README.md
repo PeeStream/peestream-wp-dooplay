@@ -9,7 +9,7 @@
 The official high-performance video player, automation suite, and safe competitor migrator for **PeeStream** (`peestream.com` / `peeplayer.com`). Tailored for high-traffic movie & TV show streaming portals running the **DooPlay** theme (2.5.x) or generic WordPress themes.
 
 > [!WARNING]
-> **BETA RELEASE (v1.0.5-beta.1) - NOT PRODUCTION TESTED**
+> **BETA RELEASE (v1.0.5-beta.2) - NOT PRODUCTION TESTED**
 > Compatibility across WordPress and DooPlay 2.5.x is expected based on architecture review and automated harness simulations (174 tests passed). Live CMS End-to-End runtime testing on an active WordPress/DooPlay installation has **NOT BEEN RUN**. Installation is recommended exclusively on staging/testing sites. Always make a full database backup before running migrations. Please report any issues along with your CMS, theme, PHP, and database versions.
 
 ---
@@ -72,7 +72,7 @@ The official high-performance video player, automation suite, and safe competito
 
 ## Installation
 
-1. Download the release package `peestream-wp-dooplay_v1.0.5-beta.1.zip` from the official GitHub Releases page.
+1. Download the release package `peestream-wp-dooplay_v1.0.5-beta.2.zip` from the official GitHub Releases page.
 2. Go to **WordPress Admin -> Plugins -> Add New -> Upload Plugin** and select the ZIP file.
 3. Click **Install Now** and activate the plugin.
 4. Go to **PeeStream -> Settings** in your WordPress admin menu.
