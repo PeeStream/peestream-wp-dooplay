@@ -47,6 +47,9 @@ By connecting your site using your PeeStream API key, video upload requests, pla
 = Do I need a PeeStream account? =
 Yes, an active account on [peestream.com](https://peestream.com) is required to generate API credentials and host video content.
 
+= Is this plugin free? =
+Yes! Core video player embedding and shortcode functionality are 100% free forever. Advanced webmaster automation (AutoPublish V2 webhook sync and competitor link migration) is currently unlocked for free under our Early Adopter Promo. In future versions, high-volume automated sync may be offered as an optional low-cost VIP webmaster addon (from $1/mo) to support ongoing infrastructure costs, while core embedding remains permanently free.
+
 = Does this work with themes other than DooPlay? =
 Yes. While native tab integration is designed for DooPlay 2.5.x, you can embed the PeeStream player on any theme using the `[peestream id="FILE_CODE"]` shortcode.
 

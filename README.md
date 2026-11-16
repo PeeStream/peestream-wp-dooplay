@@ -155,6 +155,14 @@ array(
 
 ---
 
+## Pricing & Early Adopter Promo
+
+- **Core Player & Shortcodes:** **100% Free Forever.** Embedding streams on DooPlay and standard WordPress themes will never require a paid subscription.
+- **Early Adopter Promo (Active):** All heavy automation features - including real-time **AutoPublish V2 HMAC-SHA256 webhook synchronization** and **automated competitor link migration with atomic rollback** - are currently **100% free and fully unlocked** for all beta testers.
+- **Future Roadmap:** To sustainably support server infrastructure and continuous hoster resolver maintenance, high-volume automation may later be accompanied by an optional, low-cost **VIP Webmaster Addon** (starting at ~$1/month), while standard playback and manual embedding remain permanently free.
+
+---
+
 ## License & Support
 
 - **License:** GNU General Public License v2 (GPLv2).

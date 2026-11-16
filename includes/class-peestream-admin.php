@@ -153,6 +153,7 @@ class PeeStream_Admin {
 			'email'        => isset( $res['email'] ) ? sanitize_email( $res['email'] ) : 'Active Webmaster',
 			'balance'      => isset( $res['balance'] ) ? number_format( (float) $res['balance'], 2 ) . ' USD' : '0.00 USD',
 			'storage_used' => isset( $res['storage_used'] ) ? sanitize_text_field( $res['storage_used'] ) : 'N/A',
+			'plan_tier'    => isset( $res['tier'] ) ? sanitize_text_field( $res['tier'] ) : __( 'Early Adopter Promo (Full Access)', 'peestream-wp-dooplay' ),
 			'message'      => __( 'API connection successful! Account active.', 'peestream-wp-dooplay' ),
 		) );
 	}
@@ -206,6 +207,25 @@ class PeeStream_Admin {
 						</a>
 					</div>
 				</div>
+
+				<!-- Plan & Promo Tier Banner -->
+				<div class="peestream-promo-banner" style="margin-top: 15px; padding: 12px 16px; background: #f0f6fc; border-left: 4px solid #0073aa; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+					<div>
+						<div style="font-weight: 600; color: #1d2327; font-size: 13px;">
+							<span class="dashicons dashicons-awards" style="color: #0073aa; margin-right: 4px;"></span>
+							<?php esc_html_e( 'Current Tier: Early Adopter Promo (All Features Unlocked)', 'peestream-wp-dooplay' ); ?>
+						</div>
+						<div style="font-size: 12px; color: #50575e; margin-top: 3px;">
+							<?php esc_html_e( 'All high-volume automation (AutoPublish V2 webhook sync and competitor video migrator) is 100% free during the launch promo. Basic player embedding remains free forever; dedicated mass-sync queues will later be available via PeeStream VIP webmaster addons (from $1/mo).', 'peestream-wp-dooplay' ); ?>
+						</div>
+					</div>
+					<div>
+						<span class="badge" style="background: #0073aa; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+							<?php esc_html_e( 'Free Launch Promo', 'peestream-wp-dooplay' ); ?>
+						</span>
+					</div>
+				</div>
+
 				<div id="pst-api-feedback" style="display:none;" class="peestream-notice"></div>
 			</div>
 

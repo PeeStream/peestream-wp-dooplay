@@ -55,7 +55,9 @@
 							.append(document.createTextNode(' | Balance: '))
 							.append($('<strong>').text(response.data.balance || ''))
 							.append(document.createTextNode(' | Storage: '))
-							.append($('<strong>').text(response.data.storage_used || ''));
+							.append($('<strong>').text(response.data.storage_used || ''))
+							.append(document.createTextNode(' | Tier: '))
+							.append($('<strong>').text(response.data.plan_tier || 'Early Adopter Promo (Full Access)'));
 
 						$feedback.removeClass('peestream-notice-error')
 							.addClass('peestream-notice peestream-notice-success')
