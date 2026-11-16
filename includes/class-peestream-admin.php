@@ -139,21 +139,46 @@ class PeeStream_Admin {
 		$body = wp_remote_retrieve_body( $response );
 		$data = json_decode( $body, true );
 
-		if ( 200 !== (int) $code || empty( $data ) ) {
+		if ( empty( $data ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid response from PeeStream API server.', 'peestream-wp-dooplay' ) ) );
 		}
 
-		if ( isset( $data['status'] ) && 200 !== (int) $data['status'] ) {
-			wp_send_json_error( array( 'message' => isset( $data['msg'] ) ? sanitize_text_field( $data['msg'] ) : __( 'API authentication error.', 'peestream-wp-dooplay' ) ) );
+		$res = isset( $data['result'] ) ? $data['result'] : $data;
+		$status = isset( $data['status'] ) ? (int) $data['status'] : (int) $code;
+		$result_code = isset( $res['code'] ) ? sanitize_text_field( $res['code'] ) : '';
+		$message = isset( $res['message'] ) ? sanitize_text_field( $res['message'] ) : ( isset( $data['msg'] ) ? sanitize_text_field( $data['msg'] ) : '' );
+
+		if ( 200 !== $status ) {
+			if ( 401 === $status && 'invalid_api_key' === $result_code ) {
+				$message = __( 'Invalid API key. Please check your PeeStream API key.', 'peestream-wp-dooplay' );
+			} elseif ( 403 === $status && 'account_inactive' === $result_code ) {
+				$message = __( 'Account inactive or pending approval. Active PeeStream account required.', 'peestream-wp-dooplay' );
+			} elseif ( 402 === $status && 'quota_exceeded' === $result_code ) {
+				$message = __( 'PeeStream quota exceeded. Please top-up or upgrade plan.', 'peestream-wp-dooplay' );
+			}
+
+			if ( empty( $message ) ) {
+				$message = __( 'API authentication failed.', 'peestream-wp-dooplay' );
+			}
+
+			wp_send_json_error( array( 'message' => $message ) );
 		}
 
-		$res = isset( $data['result'] ) ? $data['result'] : $data;
+		// Strict validation: Success requires actual email or login data.
+		// No fallbacks for email, balance, storage_used, or plan_tier.
+		$email = isset( $res['email'] ) ? sanitize_email( $res['email'] ) : '';
+		$login = isset( $res['login'] ) ? sanitize_text_field( $res['login'] ) : '';
+		
+		if ( empty( $email ) && empty( $login ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid response from PeeStream API server. Missing account identifiers.', 'peestream-wp-dooplay' ) ) );
+		}
 
 		wp_send_json_success( array(
-			'email'        => isset( $res['email'] ) ? sanitize_email( $res['email'] ) : 'Active Webmaster',
-			'balance'      => isset( $res['balance'] ) ? number_format( (float) $res['balance'], 2 ) . ' USD' : '0.00 USD',
-			'storage_used' => isset( $res['storage_used'] ) ? sanitize_text_field( $res['storage_used'] ) : 'N/A',
-			'plan_tier'    => isset( $res['tier'] ) ? sanitize_text_field( $res['tier'] ) : __( 'Early Adopter Promo (Full Access)', 'peestream-wp-dooplay' ),
+			'email'        => $email,
+			'login'        => $login,
+			'balance'      => isset( $res['balance'] ) ? number_format( (float) $res['balance'], 2 ) . ' USD' : '',
+			'storage_used' => isset( $res['storage_used'] ) ? sanitize_text_field( $res['storage_used'] ) : '',
+			'plan_tier'    => isset( $res['tier'] ) ? sanitize_text_field( $res['tier'] ) : '',
 			'message'      => __( 'API connection successful! Account active.', 'peestream-wp-dooplay' ),
 		) );
 	}
