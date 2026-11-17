@@ -19,6 +19,7 @@ class PeeStream_Admin {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 		add_action( 'wp_ajax_peestream_test_api', array( $this, 'ajax_test_api' ) );
+		add_action( 'wp_ajax_peestream_register_site', array( $this, 'ajax_register_site' ) );
 	}
 
 	public function register_admin_menu() {
@@ -183,6 +184,101 @@ class PeeStream_Admin {
 		) );
 	}
 
+	
+	public function ajax_register_site() {
+		check_ajax_referer( 'peestream_admin_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'peestream-wp-dooplay' ) ) );
+		}
+
+		$api_key = isset( $_POST['api_key'] ) ? sanitize_text_field( trim( $_POST['api_key'] ) ) : '';
+		if ( empty( $api_key ) ) {
+			wp_send_json_error( array( 'message' => __( 'Please enter an API key.', 'peestream-wp-dooplay' ) ) );
+		}
+
+		$api_domain = ! empty( $this->options['api_domain'] ) ? rtrim( $this->options['api_domain'], '/' ) : 'https://peestream.com';
+		if ( 0 !== strpos( $api_domain, 'https://' ) ) {
+			$api_domain = 'https://peestream.com';
+		}
+
+		$url = $api_domain . '/api/v2/sites/register';
+
+		// V2 Contract: Authorization Bearer header, HTTPS webhook_url, canonical_url, platform, adapter.
+		$webhook_url = get_rest_url( null, 'peestream/v1/webhook' );
+		$body = array(
+			'canonical_url' => home_url(),
+			'webhook_url'   => $webhook_url,
+			'platform'      => 'wordpress',
+			'adapter'       => 'dooplay',
+		);
+
+		$response = wp_safe_remote_post( $url, array(
+			'timeout'    => 15,
+			'sslverify'  => true,
+			'headers'    => array(
+				'Authorization' => 'Bearer ' . $api_key,
+				'Content-Type'  => 'application/json',
+			),
+			'body'       => json_encode( $body ),
+		) );
+
+		if ( is_wp_error( $response ) ) {
+			wp_send_json_error( array( 'message' => $response->get_error_message() ) );
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		$body_response = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body_response, true );
+
+		if ( empty( $data ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid response from PeeStream API server.', 'peestream-wp-dooplay' ) ) );
+		}
+
+		$res = isset( $data['result'] ) ? $data['result'] : $data;
+		$status = isset( $data['status'] ) ? (int) $data['status'] : (int) $code;
+		$result_code = isset( $res['code'] ) ? sanitize_text_field( $res['code'] ) : '';
+		$message = isset( $res['message'] ) ? sanitize_text_field( $res['message'] ) : ( isset( $data['msg'] ) ? sanitize_text_field( $data['msg'] ) : '' );
+
+		if ( 200 !== $status ) {
+			if ( 401 === $status && 'invalid_api_key' === $result_code ) {
+				$message = __( 'Invalid API key. Please check your PeeStream API key.', 'peestream-wp-dooplay' );
+			} elseif ( 403 === $status && 'account_inactive' === $result_code ) {
+				$message = __( 'Account inactive or pending approval. Active PeeStream account required.', 'peestream-wp-dooplay' );
+			} elseif ( 402 === $status && 'quota_exceeded' === $result_code ) {
+				$message = __( 'PeeStream quota exceeded. Please top-up or upgrade plan.', 'peestream-wp-dooplay' );
+			}
+
+			if ( empty( $message ) ) {
+				$message = __( 'Site registration failed.', 'peestream-wp-dooplay' );
+			}
+
+			wp_send_json_error( array( 'message' => $message ) );
+		}
+
+		// V2 Contract: Server returns site_id, webhook_secret, webhook_version.
+		$site_id = isset( $res['site_id'] ) ? sanitize_text_field( $res['site_id'] ) : '';
+		$webhook_secret = isset( $res['webhook_secret'] ) ? sanitize_text_field( $res['webhook_secret'] ) : '';
+		$webhook_version = isset( $res['webhook_version'] ) ? (int) $res['webhook_version'] : 1;
+
+		if ( empty( $site_id ) || empty( $webhook_secret ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid response from PeeStream API server. Missing site_id or webhook_secret.', 'peestream-wp-dooplay' ) ) );
+		}
+
+		// Update the settings with the new site_id and webhook_secret.
+		$settings = get_option( 'peestream_settings', array() );
+		$settings['site_id'] = $site_id;
+		$settings['webhook_secret'] = $webhook_secret;
+		update_option( 'peestream_settings', $settings );
+
+		wp_send_json_success( array(
+			'site_id'         => $site_id,
+			'webhook_url'     => $webhook_url,
+			'webhook_version' => $webhook_version,
+			'message'         => __( 'Site successfully registered with PeeStream AutoPublish V2.', 'peestream-wp-dooplay' ),
+		) );
+	}
+
 	public function render_admin_page() {
 		$options = wp_parse_args( get_option( 'peestream_settings', array() ), array(
 			'api_key'             => '',
@@ -227,7 +323,10 @@ class PeeStream_Admin {
 						<button type="button" class="button button-secondary" id="pst-btn-check-api">
 							<span class="dashicons dashicons-update"></span> <?php esc_html_e( 'Verify API Connection', 'peestream-wp-dooplay' ); ?>
 						</button>
-						<a href="https://peestream.com/?op=my_account" target="_blank" rel="noopener noreferrer" class="button button-primary">
+						<button type="button" class="button button-primary" id="pst-btn-register-site" style="margin-left: 8px;">
+							<span class="dashicons dashicons-networking"></span> <?php esc_html_e( 'Register Site (V2)', 'peestream-wp-dooplay' ); ?>
+						</button>
+						<a href="https://peestream.com/?op=my_account" target="_blank" rel="noopener noreferrer" class="button button-secondary">
 							<?php esc_html_e( 'Get API Key', 'peestream-wp-dooplay' ); ?> &rarr;
 						</a>
 					</div>

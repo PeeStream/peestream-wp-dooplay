@@ -13,6 +13,99 @@
 		var $statusTitle = $('#pst-status-title');
 		var $statusDesc = $('#pst-status-desc');
 
+
+		var $btnRegister = $('#pst-btn-register-site');
+		var $siteIdInput = $('#pst_site_id');
+		var $secretInput = $('#pst_webhook_secret');
+		var $webhookUrlInput = $('#pst_webhook_url');
+
+		$btnRegister.on('click', function(e) {
+			e.preventDefault();
+			var apiKey = $('#pst_api_key').val().trim();
+
+			if (!apiKey) {
+				$feedback.removeClass('peestream-notice-success')
+					.addClass('peestream-notice peestream-notice-error')
+					.empty()
+					.append($('<strong>').text('Error: '))
+					.append(document.createTextNode(' Please enter an API key first.'))
+					.slideDown();
+				return;
+			}
+
+			$btnRegister.prop('disabled', true).empty()
+				.append($('<span class="dashicons dashicons-update peestream-spin"></span>'))
+				.append(document.createTextNode(' Registering...'));
+			$feedback.slideUp();
+
+			$.ajax({
+				url: peestreamAdminData.ajax_url,
+				type: 'POST',
+				dataType: 'json',
+				data: {
+					action: 'peestream_register_site',
+					nonce: peestreamAdminData.nonce,
+					api_key: apiKey
+				},
+				success: function(response) {
+					$btnRegister.prop('disabled', false).empty()
+						.append($('<span class="dashicons dashicons-networking"></span>'))
+						.append(document.createTextNode(' Register Site (V2)'));
+
+					if (response.success && response.data) {
+						$dot.addClass('active');
+						$statusTitle.text('Site Registered (V2)');
+						$statusDesc.empty()
+							.append(document.createTextNode('Site ID: '))
+							.append($('<strong>').text(response.data.site_id || ''))
+							.append(document.createTextNode(' | Webhook URL: '))
+							.append($('<strong>').text(response.data.webhook_url || ''));
+
+						$feedback.removeClass('peestream-notice-error')
+							.addClass('peestream-notice peestream-notice-success')
+							.empty()
+							.append($('<strong>').text('Success! '))
+							.append(document.createTextNode(response.data.message || ''))
+							.slideDown();
+
+						// Update the settings fields with the returned data.
+						if ($siteIdInput.length) {
+							$siteIdInput.val(response.data.site_id || '');
+						}
+						if ($webhookUrlInput.length) {
+							$webhookUrlInput.val(response.data.webhook_url || '');
+						}
+
+						// Trigger a form save so the site_id and webhook_secret persist.
+						$('.peestream-settings-form').submit();
+					} else {
+						var err = (response.data && response.data.message) ? response.data.message : 'Unknown registration error.';
+						$dot.removeClass('active');
+						$statusTitle.text('Registration Failed');
+						$statusDesc.text('Could not register site with PeeStream AutoPublish V2.');
+
+						$feedback.removeClass('peestream-notice-success')
+							.addClass('peestream-notice peestream-notice-error')
+							.empty()
+							.append($('<strong>').text('Error: '))
+							.append(document.createTextNode(err))
+							.slideDown();
+					}
+				},
+				error: function(xhr, status, error) {
+					$btnRegister.prop('disabled', false).empty()
+						.append($('<span class="dashicons dashicons-networking"></span>'))
+						.append(document.createTextNode(' Register Site (V2)'));
+					$dot.removeClass('active');
+					$feedback.removeClass('peestream-notice-success')
+						.addClass('peestream-notice peestream-notice-error')
+						.empty()
+						.append($('<strong>').text('AJAX Error: '))
+						.append(document.createTextNode(error))
+						.slideDown();
+				}
+			});
+		});
 		$btnCheck.on('click', function(e) {
 			e.preventDefault();
 			var apiKey = $('#pst_api_key').val().trim();
